@@ -1,0 +1,1356 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="data:," />
+    <title>Pulse Contacts</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #150510;
+        --surface: #22101d;
+        --surface-2: #2d1626;
+        --text: #f7eef4;
+        --dim: #b9a3b2;
+        --border: #43253a;
+        --accent: #ff2e7e;
+        --accent-ink: #ffffff;
+        --amber: #ffb03a;
+        --radius: 14px;
+        --font-display: "Unbounded", system-ui, sans-serif;
+        --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-body);
+        font-size: 16px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2.25rem; }
+      button { font-family: inherit; cursor: pointer; }
+      a { color: var(--accent); }
+      .font-display { font-family: var(--font-display); }
+
+      /* ---------- shared form bits ---------- */
+      .field-label { display: block; font-size: 14px; font-weight: 500; color: var(--dim); margin-bottom: 4px; }
+      .input {
+        width: 100%;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        padding: 8px 12px;
+        font-size: 16px;
+        font-family: inherit;
+        color: var(--text);
+      }
+      .input::placeholder { color: var(--dim); }
+      .input:focus { border-color: var(--accent); outline: none; }
+      textarea.input { line-height: 1.5; resize: vertical; }
+      .form-stack > * + * { margin-top: 16px; }
+      .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .btn-primary {
+        width: 100%;
+        border: none;
+        border-radius: var(--radius);
+        background: var(--accent);
+        color: var(--accent-ink);
+        padding: 12px 16px;
+        font-family: var(--font-display);
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .btn-primary:disabled { opacity: 0.6; }
+      .btn-outline {
+        border: 1px solid var(--border);
+        background: transparent;
+        border-radius: var(--radius);
+        color: var(--text);
+        padding: 10px 16px;
+        font-size: 14px;
+      }
+      .btn-outline-accent {
+        border: 1px solid var(--accent);
+        background: transparent;
+        border-radius: var(--radius);
+        color: var(--accent);
+        padding: 10px 16px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .btn-outline:disabled, .btn-outline-accent:disabled { opacity: 0.6; }
+      .msg-error { color: var(--amber); font-size: 14px; line-height: 1.6; }
+      .msg-ok { color: var(--accent); font-size: 14px; line-height: 1.6; }
+      .hint { font-size: 12px; color: var(--dim); line-height: 1.6; }
+
+      /* ---------- gate screens ---------- */
+      .gate { min-height: 100vh; padding: max(16px, env(safe-area-inset-top)) 16px 40px; }
+      .gate-inner { margin: 0 auto; width: 100%; max-width: 28rem; padding-top: 40px; }
+      .gate-kicker {
+        font-family: var(--font-display);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+        margin: 0;
+      }
+      .gate h1 {
+        font-family: var(--font-display);
+        font-size: 24px;
+        font-weight: 600;
+        margin: 8px 0 0;
+      }
+      .gate .lede { margin-top: 12px; font-size: 14px; line-height: 1.7; color: var(--dim); }
+      .center-screen {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        color: var(--dim);
+        font-size: 14px;
+        text-align: center;
+      }
+
+      /* ---------- app chrome ---------- */
+      .app-header {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+        padding: max(8px, env(safe-area-inset-top)) 16px 12px;
+      }
+      .app-header-inner, .app-main { margin: 0 auto; width: 100%; max-width: 72rem; }
+      .header-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 8px; }
+      .header-counts { font-size: 14px; color: var(--dim); margin: 0; }
+      .header-counts strong { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--text); }
+      .crew-btn {
+        flex-shrink: 0;
+        border: 1px solid var(--border);
+        background: transparent;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 14px;
+        color: var(--text);
+      }
+      .tabs { display: flex; gap: 4px; margin-top: 12px; }
+      .tab-btn {
+        flex: 1;
+        border-radius: 8px;
+        padding: 8px;
+        font-family: var(--font-display);
+        font-size: 12px;
+        font-weight: 600;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--dim);
+      }
+      .tab-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+      .tab-badge {
+        margin-left: 6px;
+        border-radius: 999px;
+        padding: 1px 6px;
+        font-size: 12px;
+        font-family: var(--font-body);
+        background: var(--amber);
+        color: #000;
+      }
+      .tab-btn[aria-pressed="true"] .tab-badge { background: rgba(0,0,0,0.3); color: #fff; }
+      .app-main { padding: 16px 16px 112px; }
+
+      /* ---------- cards & board ---------- */
+      .card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface);
+        padding: 12px;
+      }
+      .card-open { display: block; width: 100%; text-align: left; background: none; border: none; padding: 0; color: inherit; }
+      .card-name { font-size: 16px; font-weight: 600; line-height: 1.5; }
+      .card-ig { display: block; margin-top: 2px; font-size: 14px; color: var(--accent); }
+      .card-next { display: block; margin-top: 6px; font-size: 14px; line-height: 1.45; }
+      .card-meta { display: block; margin-top: 8px; font-size: 12px; color: var(--dim); }
+      .chip-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+      .badge {
+        display: inline-block;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        padding: 2px 8px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--dim);
+      }
+      .chip {
+        display: inline-block;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        padding: 2px 8px;
+        font-size: 12px;
+        color: var(--dim);
+      }
+      .chip-warn { border-color: var(--amber); color: var(--amber); }
+      .chip-attention { border-color: var(--amber); color: var(--amber); font-weight: 500; }
+      .advance-btn {
+        margin-top: 8px;
+        width: 100%;
+        border: 1px solid var(--accent);
+        background: transparent;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--accent);
+      }
+      .advance-btn:disabled { opacity: 0.6; }
+      .board { display: flex; flex-direction: column; gap: 24px; }
+      .board-col h2 {
+        font-family: var(--font-display);
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--dim);
+        margin: 0;
+      }
+      .board-col h2 .count { color: var(--accent); }
+      .col-cards { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+      .col-empty {
+        border: 1px dashed var(--border);
+        border-radius: var(--radius);
+        padding: 12px;
+        font-size: 12px;
+        color: var(--dim);
+      }
+      @media (min-width: 1024px) {
+        .board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+        .tab-btn { font-size: 14px; }
+      }
+      .attention-banner {
+        display: block;
+        width: 100%;
+        text-align: left;
+        margin-bottom: 16px;
+        border: 1px solid var(--amber);
+        border-radius: var(--radius);
+        background: var(--surface);
+        padding: 12px 16px;
+        color: var(--text);
+      }
+      .attention-banner .ab-title { font-size: 14px; font-weight: 500; color: var(--amber); }
+      .attention-banner .ab-sub { display: block; font-size: 12px; color: var(--dim); margin-top: 2px; }
+      .empty-state {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface);
+        padding: 24px;
+        text-align: center;
+      }
+      .empty-state h2 { font-family: var(--font-display); font-size: 16px; font-weight: 600; margin: 0; }
+      .empty-state p { margin: 8px auto 0; max-width: 24rem; font-size: 14px; line-height: 1.7; color: var(--dim); }
+      .empty-state .btn-primary { width: auto; margin-top: 16px; padding: 10px 20px; }
+
+      /* ---------- list view ---------- */
+      .filter-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+      .filter-btn {
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 14px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--dim);
+      }
+      .filter-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
+      .list-rows { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+      .list-row { display: block; width: 100%; text-align: left; color: inherit; font-size: inherit; }
+      .list-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--dim); }
+      .list-sub .ig { color: var(--accent); font-size: 12px; }
+
+      /* ---------- attention & activity ---------- */
+      .attention-card { border-color: var(--amber); display: block; width: 100%; text-align: left; color: inherit; font-size: inherit; }
+      .attention-reasons { display: block; margin-top: 4px; font-size: 14px; font-weight: 500; color: var(--amber); }
+      .activity-row { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 10px 12px; }
+      .activity-row .actor { font-weight: 500; color: var(--accent); }
+      .activity-row p { margin: 0; font-size: 14px; }
+      .activity-row .when { font-size: 12px; color: var(--dim); }
+      .stack { display: flex; flex-direction: column; gap: 8px; }
+      .section-intro { font-size: 14px; line-height: 1.7; color: var(--dim); margin: 0; }
+
+      /* ---------- FAB ---------- */
+      .fab {
+        position: fixed;
+        right: 16px;
+        bottom: calc(24px + env(safe-area-inset-bottom));
+        z-index: 40;
+        border: none;
+        border-radius: 999px;
+        background: var(--accent);
+        color: var(--accent-ink);
+        padding: 12px 20px;
+        font-family: var(--font-display);
+        font-size: 14px;
+        font-weight: 600;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      }
+
+      /* ---------- sheets ---------- */
+      .sheet-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        background: rgba(0,0,0,0.7);
+      }
+      .sheet {
+        max-height: 92vh;
+        width: 100%;
+        max-width: 32rem;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-bottom: none;
+        border-radius: 16px 16px 0 0;
+        background: var(--bg);
+        padding: 16px 16px 32px;
+      }
+      @media (min-width: 640px) {
+        .sheet-backdrop { align-items: center; }
+        .sheet { border-radius: 16px; border-bottom: 1px solid var(--border); }
+      }
+      .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .sheet-head h2 { font-family: var(--font-display); font-size: 16px; font-weight: 600; margin: 0; }
+      .sheet-close {
+        border: 1px solid var(--border);
+        background: transparent;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 14px;
+        color: var(--dim);
+      }
+      .sheet h3 { font-family: var(--font-display); font-size: 14px; font-weight: 600; margin: 24px 0 0; }
+      .quick-links { display: flex; flex-wrap: wrap; gap: 8px; }
+      .quick-links a {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 14px;
+        color: var(--text);
+        text-decoration: none;
+      }
+      .member-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface);
+        padding: 8px 12px;
+      }
+      .member-row .m-name { font-size: 14px; font-weight: 500; margin: 0; }
+      .member-row .m-name .owner-tag { margin-left: 8px; font-size: 12px; color: var(--accent); }
+      .member-row .m-phone { font-size: 12px; color: var(--dim); margin: 0; }
+      .remove-btn {
+        border: 1px solid var(--border);
+        background: transparent;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 14px;
+        color: var(--dim);
+        flex-shrink: 0;
+      }
+      .remove-btn:disabled { opacity: 0.6; }
+      .delete-confirm { display: flex; gap: 8px; }
+      .delete-confirm button { flex: 1; }
+      .btn-danger-outline {
+        border: 1px solid var(--amber);
+        background: transparent;
+        border-radius: var(--radius);
+        color: var(--amber);
+        padding: 10px 16px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .sr-only {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="sheet-root"></div>
+
+    <script>
+      "use strict";
+
+      /* ================================================================
+         Pulse Contacts — crew-only board for Desi Pulse PNW networking
+         contacts (DJs, venues, event hosts). Data lives in a Supabase
+         project; every read/write goes through its RPC functions with a
+         session token from phone + shared secret code sign-in.
+         ================================================================ */
+
+      var SB_URL = "https://iwglronqqiescekkfvhr.supabase.co";
+      var SB_KEY = "sb_publishable_fWBN51ujRoulapGmSfc9Ow_6gfpVvz2";
+
+      var TOKEN_KEY = "pc-token";
+      var NAME_KEY = "pc-name";
+      var PHONE_KEY = "pc-phone";
+
+      var STAGES = ["To Contact", "Reached Out", "In Conversation", "Confirmed", "Not Now / Passed"];
+      var TYPES = ["DJ", "Venue", "Event host", "Other"];
+      var STALE_DAYS = 14;
+
+      /* ---------------- state ---------------- */
+      var state = {
+        token: null,
+        myName: null,
+        myPhone: null,      // digits, as stored server-side
+        configured: null,   // null = unknown, true/false after probe
+        contacts: null,     // null = not loaded yet
+        members: [],
+        activity: null,
+        tab: "board",
+        search: "",
+        typeFilter: "All",
+        loadError: null,
+        busyStage: {}       // contact id -> true while a stage move is in flight
+      };
+
+      /* ---------------- storage (session token only) ---------------- */
+      function readStored(key) {
+        try { return localStorage.getItem(key); } catch (e) { return null; }
+      }
+      function storeValue(key, value) {
+        try {
+          if (value) localStorage.setItem(key, value);
+          else localStorage.removeItem(key);
+        } catch (e) { /* private mode: session lasts for this view only */ }
+      }
+      function persistSession() {
+        storeValue(TOKEN_KEY, state.token);
+        storeValue(NAME_KEY, state.myName);
+        storeValue(PHONE_KEY, state.myPhone);
+      }
+      function clearSession() {
+        state.token = null;
+        state.myName = null;
+        state.myPhone = null;
+        state.contacts = null;
+        state.members = [];
+        state.activity = null;
+        persistSession();
+      }
+
+      /* ---------------- helpers ---------------- */
+      function esc(s) {
+        return String(s == null ? "" : s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+      // Exactly what the server does: strip everything but digits.
+      function digits(raw) { return String(raw || "").replace(/\D/g, ""); }
+
+      function todayStr() {
+        var d = new Date();
+        var m = String(d.getMonth() + 1).padStart(2, "0");
+        var day = String(d.getDate()).padStart(2, "0");
+        return d.getFullYear() + "-" + m + "-" + day;
+      }
+      function formatFollowUp(dateStr) {
+        var parts = String(dateStr).split("-").map(Number);
+        var d = new Date(parts[0] || 1970, (parts[1] || 1) - 1, parts[2] || 1);
+        return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      }
+      function daysSince(iso) {
+        return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+      }
+      function relativeTime(iso) {
+        var mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+        if (mins < 1) return "just now";
+        if (mins < 60) return mins + "m ago";
+        var hours = Math.floor(mins / 60);
+        if (hours < 24) return hours + "h ago";
+        var days = Math.floor(hours / 24);
+        if (days < 30) return days + "d ago";
+        return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      }
+      function isClosed(c) { return c.stage === "Confirmed" || c.stage === "Not Now / Passed"; }
+
+      function attentionReasons(c) {
+        if (isClosed(c)) return [];
+        var reasons = [];
+        var today = todayStr();
+        if (!c.follow_up_date) reasons.push("No follow-up set");
+        else if (c.follow_up_date < today) reasons.push("Follow-up was due " + formatFollowUp(c.follow_up_date));
+        else if (c.follow_up_date === today) reasons.push("Follow-up due today");
+        var days = daysSince(c.updated_at);
+        if (days >= STALE_DAYS) reasons.push("Untouched for " + days + " days");
+        return reasons;
+      }
+      function typeBadge(type) {
+        return '<span class="badge">' + esc(type) + "</span>";
+      }
+      function followUpChip(c) {
+        if (!c.follow_up_date) return "";
+        var today = todayStr();
+        var overdue = c.follow_up_date < today && !isClosed(c);
+        var dueToday = c.follow_up_date === today && !isClosed(c);
+        var label = overdue
+          ? "Follow-up " + formatFollowUp(c.follow_up_date) + " · overdue"
+          : dueToday
+            ? "Follow-up today"
+            : "Follow-up " + formatFollowUp(c.follow_up_date);
+        return '<span class="chip' + (overdue || dueToday ? " chip-warn" : "") + '">' + esc(label) + "</span>";
+      }
+
+      /* ---------------- Supabase RPC ---------------- */
+      function rpc(fn, body) {
+        return fetch(SB_URL + "/rest/v1/rpc/" + fn, {
+          method: "POST",
+          headers: {
+            "apikey": SB_KEY,
+            "Authorization": "Bearer " + SB_KEY,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body || {})
+        }).catch(function () {
+          throw new Error("Couldn\u2019t reach the board \u2014 check your connection and try again.");
+        }).then(function (res) {
+          return res.text().then(function (text) {
+            var data = null;
+            try { data = text ? JSON.parse(text) : null; } catch (e) { /* keep null */ }
+            if (!res.ok) {
+              var msg = data && data.message ? data.message : "Request failed (" + res.status + "). Try again.";
+              var err = new Error(msg);
+              err.code = data && data.code;
+              throw err;
+            }
+            return data;
+          });
+        });
+      }
+      function isSessionError(err) {
+        return !!err && /invalid or expired session/i.test(err.message || "");
+      }
+      function handleSessionExpiry(err) {
+        if (isSessionError(err)) {
+          clearSession();
+          render();
+          return true;
+        }
+        return false;
+      }
+    </script>
+    <script>
+      "use strict";
+
+      /* ---------------- data loading ---------------- */
+      function loadBoard() {
+        return Promise.all([
+          rpc("list_contacts", { p_token: state.token }),
+          rpc("list_members", { p_token: state.token })
+        ]).then(function (results) {
+          state.contacts = results[0] || [];
+          state.members = results[1] || [];
+          state.loadError = null;
+        }).catch(function (err) {
+          if (handleSessionExpiry(err)) return;
+          state.loadError = err.message || "Couldn't load the board.";
+        }).then(render);
+      }
+      function loadActivity() {
+        return rpc("list_activity", { p_token: state.token, p_limit: 100 })
+          .then(function (rows) { state.activity = rows || []; })
+          .catch(function (err) {
+            if (handleSessionExpiry(err)) return;
+            state.activity = [];
+          })
+          .then(render);
+      }
+      function isOwner() {
+        // The owner is the earliest-joined member (setup adds them first).
+        if (!state.members.length || !state.myPhone) return false;
+        return state.members[0].phone_digits === state.myPhone;
+      }
+      function ownerPhone() {
+        return state.members.length ? state.members[0].phone_digits : null;
+      }
+
+      /* ---------------- gate screens ---------------- */
+      function gateShell(heading, inner) {
+        return '<div class="gate"><main class="gate-inner">' +
+          '<p class="gate-kicker">Pulse · Crew Board</p>' +
+          "<h1>" + esc(heading) + "</h1>" + inner + "</main></div>";
+      }
+
+      function renderSetup() {
+        document.getElementById("root").innerHTML = gateShell("Set up crew access",
+          '<p class="lede">This board holds the crew\u2019s networking contacts \u2014 DJs, venues, event hosts. ' +
+          "It stays locked: only phone numbers on the crew list, plus one shared secret code, can get in. " +
+          "You\u2019re the first one here, so you set the code and become the owner. Add the rest of the crew " +
+          "from the Crew panel once you\u2019re in.</p>" +
+          '<form id="setup-form" class="form-stack" style="margin-top:24px">' +
+            '<div><label class="field-label" for="setup-name">Your name</label>' +
+            '<input id="setup-name" class="input" autocomplete="name" required placeholder="e.g. Chandra" /></div>' +
+            '<div><label class="field-label" for="setup-phone">Your phone number</label>' +
+            '<input id="setup-phone" class="input" type="tel" inputmode="tel" autocomplete="tel" required placeholder="(206) 555-0100" /></div>' +
+            '<div><label class="field-label" for="setup-code">Shared secret code (at least 4 characters)</label>' +
+            '<input id="setup-code" class="input" type="password" autocomplete="new-password" required minlength="4" placeholder="Something only the crew knows" />' +
+            '<p class="hint" style="margin-top:4px">Share this code with the crew in person or in your group chat \u2014 everyone uses the same code with their own phone number.</p></div>' +
+            '<p id="setup-error" class="msg-error" role="alert" hidden></p>' +
+            '<button id="setup-submit" type="submit" class="btn-primary">Create crew access</button>' +
+          "</form>");
+
+        document.getElementById("setup-form").addEventListener("submit", function (e) {
+          e.preventDefault();
+          var name = document.getElementById("setup-name").value.trim();
+          var phone = document.getElementById("setup-phone").value.trim();
+          var code = document.getElementById("setup-code").value;
+          var errEl = document.getElementById("setup-error");
+          var btn = document.getElementById("setup-submit");
+          errEl.hidden = true;
+          btn.disabled = true;
+          btn.textContent = "Setting up\u2026";
+          rpc("setup_owner", { p_owner_name: name, p_owner_phone: phone, p_code: code })
+            .then(function (rows) {
+              var row = rows && rows[0];
+              if (!row || !row.token) throw new Error("Setup failed. Try again.");
+              state.token = row.token;
+              state.myName = name;
+              state.myPhone = digits(phone);
+              state.configured = true;
+              persistSession();
+              render();
+              loadBoard();
+            })
+            .catch(function (err) {
+              btn.disabled = false;
+              btn.textContent = "Create crew access";
+              errEl.textContent = err.message || "Setup failed. Try again.";
+              errEl.hidden = false;
+            });
+        });
+      }
+
+      function renderSignin() {
+        document.getElementById("root").innerHTML = gateShell("Crew sign-in",
+          '<p class="lede">This board is crew-only. Enter the phone number you\u2019re on the crew list with, plus the shared secret code.</p>' +
+          '<form id="signin-form" class="form-stack" style="margin-top:24px">' +
+            '<div><label class="field-label" for="signin-phone">Phone number</label>' +
+            '<input id="signin-phone" class="input" type="tel" inputmode="tel" autocomplete="tel" required placeholder="(206) 555-0100" /></div>' +
+            '<div><label class="field-label" for="signin-code">Secret code</label>' +
+            '<input id="signin-code" class="input" type="password" autocomplete="current-password" required placeholder="The crew code" /></div>' +
+            '<p id="signin-error" class="msg-error" role="alert" hidden></p>' +
+            '<button id="signin-submit" type="submit" class="btn-primary">Unlock the board</button>' +
+            '<p class="hint">Not on the list yet? Ask whoever set this up to add your number from the Crew panel inside. You\u2019ll stay signed in on this device for 30 days.</p>' +
+          "</form>");
+
+        document.getElementById("signin-form").addEventListener("submit", function (e) {
+          e.preventDefault();
+          var phone = document.getElementById("signin-phone").value.trim();
+          var code = document.getElementById("signin-code").value;
+          var errEl = document.getElementById("signin-error");
+          var btn = document.getElementById("signin-submit");
+          errEl.hidden = true;
+          btn.disabled = true;
+          btn.textContent = "Checking\u2026";
+          rpc("verify_signin", { p_phone: phone, p_code: code })
+            .then(function (rows) {
+              var row = rows && rows[0];
+              if (!row || !row.token) throw new Error("Couldn\u2019t sign you in.");
+              state.token = row.token;
+              state.myName = row.member_name;
+              state.myPhone = digits(phone);
+              persistSession();
+              render();
+              loadBoard();
+            })
+            .catch(function (err) {
+              btn.disabled = false;
+              btn.textContent = "Unlock the board";
+              if (/setup has not been completed/i.test(err.message || "")) {
+                state.configured = false;
+                render();
+                return;
+              }
+              errEl.textContent = err.message || "Couldn\u2019t sign you in.";
+              errEl.hidden = false;
+            });
+        });
+      }
+
+      /* ---------------- contact card ---------------- */
+      function contactCard(c) {
+        var reasons = attentionReasons(c);
+        var idx = STAGES.indexOf(c.stage);
+        var nextStage = idx >= 0 && idx < STAGES.length - 1 ? STAGES[idx + 1] : null;
+        var html = '<article class="card">' +
+          '<button type="button" class="card-open" data-open-contact="' + c.id + '" aria-label="Open ' + esc(c.name) + '">' +
+            '<span style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">' +
+              '<span class="card-name">' + esc(c.name) + "</span>" + typeBadge(c.contact_type) +
+            "</span>";
+        if (c.instagram_handle) {
+          html += '<span class="card-ig">@' + esc(String(c.instagram_handle).replace(/^@/, "")) + "</span>";
+        }
+        if (c.next_step) {
+          html += '<span class="card-next">Next: ' + esc(c.next_step) + "</span>";
+        }
+        var chips = followUpChip(c);
+        if (reasons.length) chips += '<span class="chip chip-attention">Needs attention</span>';
+        if (chips) html += '<span class="chip-row">' + chips + "</span>";
+        html += '<span class="card-meta">Added by ' + esc(c.added_by) + " · updated " + relativeTime(c.updated_at) + "</span>" +
+          "</button>";
+        if (nextStage) {
+          html += '<button type="button" class="advance-btn" data-advance="' + c.id + '" data-stage="' + esc(nextStage) + '"' +
+            (state.busyStage[c.id] ? " disabled" : "") + ' aria-label="Move ' + esc(c.name) + " to " + esc(nextStage) + '">' +
+            (state.busyStage[c.id] ? "Moving\u2026" : "Move to " + esc(nextStage) + " \u2192") + "</button>";
+        }
+        html += "</article>";
+        return html;
+      }
+
+      /* ---------------- main views ---------------- */
+      function countsLine() {
+        var counts = {};
+        state.contacts.forEach(function (c) { counts[c.contact_type] = (counts[c.contact_type] || 0) + 1; });
+        var n = state.contacts.length;
+        var parts = "";
+        TYPES.forEach(function (t) {
+          var c = counts[t] || 0;
+          if (!c) return;
+          var word = t === "DJ" ? (c === 1 ? "DJ" : "DJs")
+            : t === "Venue" ? (c === 1 ? "venue" : "venues")
+            : t === "Event host" ? (c === 1 ? "host" : "hosts") : "other";
+          parts += " · " + c + " " + word;
+        });
+        return "<strong>" + n + "</strong> " + (n === 1 ? "contact" : "contacts") + parts;
+      }
+      function attentionList() {
+        return state.contacts
+          .map(function (c) { return { contact: c, reasons: attentionReasons(c) }; })
+          .filter(function (x) { return x.reasons.length > 0; })
+          .sort(function (a, b) { return a.contact.updated_at < b.contact.updated_at ? -1 : 1; });
+      }
+
+      function renderBoard(attention) {
+        if (state.contacts.length === 0) {
+          return '<div class="empty-state"><h2>No contacts yet</h2>' +
+            "<p>Add the first DJ, venue, or event host and the board starts filling in. Every contact the crew adds shows up here for everyone.</p>" +
+            '<button type="button" class="btn-primary" data-add-contact>Add the first contact</button></div>';
+        }
+        var html = "";
+        if (attention.length > 0) {
+          html += '<button type="button" class="attention-banner" data-goto-attention aria-label="' +
+            attention.length + (attention.length === 1 ? " contact needs" : " contacts need") + ' attention \u2014 view them">' +
+            '<span class="ab-title">' + attention.length + (attention.length === 1 ? " contact needs" : " contacts need") + " attention</span>" +
+            '<span class="ab-sub">No follow-up set, a follow-up due, or untouched for ' + STALE_DAYS + "+ days \u2014 tap to see who.</span></button>";
+        }
+        html += '<div class="board">';
+        STAGES.forEach(function (stage) {
+          var inStage = state.contacts.filter(function (c) { return c.stage === stage; });
+          html += '<section class="board-col" aria-label="' + esc(stage) + '"><h2>' + esc(stage) +
+            ' <span class="count">' + inStage.length + "</span></h2>" +
+            '<div class="col-cards">';
+          if (!inStage.length) html += '<p class="col-empty">Nobody here yet</p>';
+          inStage.forEach(function (c) { html += contactCard(c); });
+          html += "</div></section>";
+        });
+        html += "</div>";
+        return html;
+      }
+
+      function renderList() {
+        var counts = {};
+        state.contacts.forEach(function (c) { counts[c.contact_type] = (counts[c.contact_type] || 0) + 1; });
+        var q = state.search.trim().toLowerCase();
+        var filtered = state.contacts.filter(function (c) {
+          if (state.typeFilter !== "All" && c.contact_type !== state.typeFilter) return false;
+          if (!q) return true;
+          return [c.name, c.instagram_handle || "", c.notes || "", c.next_step || "", c.added_by]
+            .join(" ").toLowerCase().indexOf(q) !== -1;
+        });
+        var html = '<div><label class="sr-only" for="search">Search contacts</label>' +
+          '<input id="search" class="input" type="search" placeholder="Search name, Instagram, notes\u2026" value="' + esc(state.search) + '" /></div>' +
+          '<div class="filter-row" role="group" aria-label="Filter by type">';
+        ["All"].concat(TYPES).forEach(function (t) {
+          var label = t + (t !== "All" && counts[t] ? " (" + counts[t] + ")" : "");
+          html += '<button type="button" class="filter-btn" data-type-filter="' + esc(t) + '" aria-pressed="' +
+            (state.typeFilter === t) + '">' + esc(label) + "</button>";
+        });
+        html += '</div><div class="list-rows">';
+        if (!filtered.length) html += '<p class="section-intro">No contacts match that search.</p>';
+        filtered.forEach(function (c) {
+          html += '<button type="button" class="card list-row" data-open-contact="' + c.id + '" aria-label="Open ' + esc(c.name) + '">' +
+            '<span style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">' +
+              '<span class="card-name">' + esc(c.name) + "</span>" + typeBadge(c.contact_type) + "</span>" +
+            '<span class="list-sub"><span>' + esc(c.stage) + "</span>" +
+            (c.instagram_handle ? '<span class="ig">@' + esc(String(c.instagram_handle).replace(/^@/, "")) + "</span>" : "") +
+            "<span>· added by " + esc(c.added_by) + "</span></span>" +
+            (c.next_step ? '<span class="card-next">Next: ' + esc(c.next_step) + "</span>" : "") +
+            (followUpChip(c) ? '<span class="chip-row">' + followUpChip(c) + "</span>" : "") +
+            "</button>";
+        });
+        html += "</div>";
+        return html;
+      }
+
+      function renderAttention(attention) {
+        var html = '<p class="section-intro">Anyone active who has no follow-up date, a follow-up due or overdue, or hasn\u2019t been touched in ' +
+          STALE_DAYS + "+ days lands here \u2014 so no important contact quietly gets lost.</p>" +
+          '<div class="stack" style="margin-top:16px">';
+        if (!attention.length) {
+          html += '<div class="card"><p style="margin:0;font-size:14px">All clear \u2014 every active contact has a follow-up set and has been touched recently.</p></div>';
+        }
+        attention.forEach(function (x) {
+          var c = x.contact;
+          html += '<button type="button" class="card attention-card" data-open-contact="' + c.id + '" aria-label="Open ' + esc(c.name) + " \u2014 " + esc(x.reasons.join(", ")) + '">' +
+            '<span style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">' +
+              '<span class="card-name">' + esc(c.name) + "</span>" + typeBadge(c.contact_type) + "</span>" +
+            '<span class="attention-reasons">' + esc(x.reasons.join(" · ")) + "</span>" +
+            (c.next_step ? '<span class="card-next">Next: ' + esc(c.next_step) + "</span>" : "") +
+            '<span class="card-meta">' + esc(c.stage) + " · added by " + esc(c.added_by) + "</span>" +
+            "</button>";
+        });
+        html += "</div>";
+        return html;
+      }
+
+      var ACTION_TEXT = {
+        setup: function (d) { return "completed the crew setup"; },
+        contact_added: function (d) { return "added " + d; },
+        contact_updated: function (d) { return "updated " + d; },
+        contact_deleted: function (d) { return "deleted " + d; },
+        stage_changed: function (d) { return "moved " + d; },
+        member_added: function (d) { return "added crew member " + d; },
+        member_removed: function (d) { return "removed crew member " + d; },
+        code_changed: function (d) { return d || "changed the secret code"; }
+      };
+      function renderActivity() {
+        if (state.activity === null) return '<p class="section-intro">Loading activity\u2026</p>';
+        if (!state.activity.length) return '<p class="section-intro">Nothing yet \u2014 adds, moves, and edits will show up here.</p>';
+        var html = '<div class="stack">';
+        state.activity.forEach(function (entry) {
+          var fn = ACTION_TEXT[entry.action];
+          var text = fn ? fn(entry.detail || "") : (entry.action + (entry.detail ? ": " + entry.detail : ""));
+          html += '<div class="activity-row"><p><span class="actor">' + esc(entry.actor_name) + "</span> " +
+            esc(text) + '</p><p class="when">' + relativeTime(entry.created_at) + "</p></div>";
+        });
+        html += "</div>";
+        return html;
+      }
+
+      function renderApp() {
+        var attention = state.contacts ? attentionList() : [];
+        var tabs = [
+          { key: "board", label: "Board" },
+          { key: "list", label: "List" },
+          { key: "attention", label: "Attention", badge: attention.length },
+          { key: "activity", label: "Activity" }
+        ];
+        var html = '<header class="app-header"><div class="app-header-inner">' +
+          '<div class="header-row"><p class="header-counts">' +
+          (state.contacts ? countsLine() : "Loading\u2026") +
+          '</p><button type="button" class="crew-btn" id="crew-open" aria-label="Open crew access panel">Crew · ' +
+          esc(state.myName || "") + "</button></div>" +
+          '<nav class="tabs" aria-label="Views">';
+        tabs.forEach(function (t) {
+          html += '<button type="button" class="tab-btn" data-tab="' + t.key + '" aria-pressed="' + (state.tab === t.key) + '">' +
+            t.label + (t.badge ? '<span class="tab-badge">' + t.badge + "</span>" : "") + "</button>";
+        });
+        html += '</nav></div></header><main class="app-main">';
+
+        if (state.actionError) {
+          html += '<div class="card" style="border-color:var(--amber);margin-bottom:16px"><p class="msg-error" style="margin:0">' +
+            esc(state.actionError) + "</p></div>";
+          state.actionError = null;
+        }
+        if (state.loadError) {
+          html += '<div class="card"><p style="margin:0;font-size:14px">Couldn\u2019t load the board.</p>' +
+            '<p class="hint" style="margin-top:4px">' + esc(state.loadError) + "</p>" +
+            '<button type="button" class="btn-outline-accent" id="retry-load" style="margin-top:8px;padding:6px 12px">Try again</button></div>';
+        } else if (!state.contacts) {
+          html += '<p class="section-intro">Loading contacts\u2026</p>';
+        } else if (state.tab === "board") {
+          html += renderBoard(attention);
+        } else if (state.tab === "list") {
+          html += renderList();
+        } else if (state.tab === "attention") {
+          html += renderAttention(attention);
+        } else if (state.tab === "activity") {
+          html += renderActivity();
+        }
+        html += "</main>" +
+          '<button type="button" class="fab" id="fab-add" aria-label="Add a contact">+ Add contact</button>';
+
+        document.getElementById("root").innerHTML = html;
+
+        document.getElementById("crew-open").addEventListener("click", openCrewSheet);
+        document.getElementById("fab-add").addEventListener("click", function () { openContactSheet(null); });
+        var retry = document.getElementById("retry-load");
+        if (retry) retry.addEventListener("click", loadBoard);
+        var search = document.getElementById("search");
+        if (search) {
+          search.addEventListener("input", function () {
+            state.search = search.value;
+            var pos = search.selectionStart;
+            render();
+            var again = document.getElementById("search");
+            if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+          });
+        }
+      }
+
+      /* ---------------- root render ---------------- */
+      function render() {
+        closeSheets();
+        if (!state.token) {
+          if (state.configured === false) renderSetup();
+          else renderSignin();
+          return;
+        }
+        renderApp();
+      }
+
+      /* ---------------- global click delegation ---------------- */
+      document.addEventListener("click", function (e) {
+        var t = e.target;
+        function closest(sel) { return t.closest ? t.closest(sel) : null; }
+
+        var tabBtn = closest("[data-tab]");
+        if (tabBtn) {
+          state.tab = tabBtn.getAttribute("data-tab");
+          render();
+          if (state.tab === "activity" && state.activity === null) loadActivity();
+          return;
+        }
+        var filterBtn = closest("[data-type-filter]");
+        if (filterBtn) {
+          state.typeFilter = filterBtn.getAttribute("data-type-filter");
+          render();
+          return;
+        }
+        var adv = closest("[data-advance]");
+        if (adv) {
+          var id = adv.getAttribute("data-advance");
+          var stage = adv.getAttribute("data-stage");
+          if (state.busyStage[id]) return;
+          state.busyStage[id] = true;
+          render();
+          rpc("update_contact_stage", { p_token: state.token, p_contact_id: id, p_stage: stage })
+            .then(function () { state.activity = null; return loadBoard(); })
+            .catch(function (err) {
+              if (!handleSessionExpiry(err)) {
+                state.actionError = err.message || "Couldn't move that contact. Try again.";
+                if (state.token) render();
+              }
+            })
+            .then(function () { delete state.busyStage[id]; if (state.token) render(); });
+          return;
+        }
+        var openBtn = closest("[data-open-contact]");
+        if (openBtn) {
+          var cid = openBtn.getAttribute("data-open-contact");
+          var contact = (state.contacts || []).filter(function (c) { return c.id === cid; })[0];
+          if (contact) openContactSheet(contact);
+          return;
+        }
+        if (closest("[data-add-contact]")) { openContactSheet(null); return; }
+        if (closest("[data-goto-attention]")) {
+          state.tab = "attention";
+          render();
+          return;
+        }
+      });
+
+      /* Refetch when the crew comes back to the tab, so changes made by
+         someone else show up without a manual reload. */
+      document.addEventListener("visibilitychange", function () {
+        if (!document.hidden && state.token && state.contacts) loadBoard();
+      });
+    </script>
+    <script>
+      "use strict";
+
+      /* ---------------- sheets ---------------- */
+      var sheetRoot = document.getElementById("sheet-root");
+
+      function closeSheets() { sheetRoot.innerHTML = ""; }
+      function sheetShell(title, bodyHtml, label) {
+        sheetRoot.innerHTML =
+          '<div class="sheet-backdrop" id="sheet-backdrop">' +
+            '<div class="sheet" role="dialog" aria-modal="true" aria-label="' + esc(label || title) + '">' +
+              '<div class="sheet-head"><h2>' + esc(title) + "</h2>" +
+              '<button type="button" class="sheet-close" id="sheet-close">Close</button></div>' +
+              bodyHtml +
+            "</div></div>";
+        document.getElementById("sheet-close").addEventListener("click", closeSheets);
+        document.getElementById("sheet-backdrop").addEventListener("click", function (e) {
+          if (e.target === e.currentTarget) closeSheets();
+        });
+      }
+      function fieldHtml(id, label, inner, hint) {
+        return '<div><label class="field-label" for="' + id + '">' + esc(label) + "</label>" + inner +
+          (hint ? '<p class="hint" style="margin-top:4px">' + hint + "</p>" : "") + "</div>";
+      }
+      function inputHtml(id, value, attrs) {
+        return '<input id="' + id + '" class="input" value="' + esc(value || "") + '" ' + (attrs || "") + " />";
+      }
+      function optionsHtml(values, current) {
+        return values.map(function (v) {
+          return '<option value="' + esc(v) + '"' + (v === current ? " selected" : "") + ">" + esc(v) + "</option>";
+        }).join("");
+      }
+
+      /* ---------------- contact editor ---------------- */
+      function openContactSheet(contact) {
+        var isNew = !contact;
+        var c = contact || {
+          name: "", contact_type: "DJ", stage: "To Contact", instagram_handle: "",
+          phone: "", email: "", notes: "", next_step: "", follow_up_date: "", owner: ""
+        };
+        var memberNames = state.members.map(function (m) { return m.name; });
+
+        var body = "";
+        if (!isNew) {
+          body += '<p class="hint" style="margin-top:4px">Added by ' + esc(c.added_by) +
+            " · last updated " + relativeTime(c.updated_at) + "</p>";
+        }
+        body += '<form id="contact-form" class="form-stack" style="margin-top:16px">';
+        body += fieldHtml("c-name", "Name *", inputHtml("c-name", c.name, 'required placeholder="Person, act, or venue name"'));
+        body += '<div class="grid-2">' +
+          fieldHtml("c-type", "Type",
+            '<select id="c-type" class="input">' + optionsHtml(TYPES, c.contact_type) + "</select>") +
+          fieldHtml("c-stage", "Stage",
+            '<select id="c-stage" class="input">' + optionsHtml(STAGES, c.stage) + "</select>") +
+          "</div>";
+        body += fieldHtml("c-instagram", "Instagram handle",
+          inputHtml("c-instagram", c.instagram_handle, 'placeholder="@handle" autocapitalize="none"'));
+        body += '<div class="grid-2">' +
+          fieldHtml("c-phone", "Phone", inputHtml("c-phone", c.phone, 'type="tel" inputmode="tel" placeholder="Optional"')) +
+          fieldHtml("c-email", "Email", inputHtml("c-email", c.email, 'type="email" inputmode="email" autocapitalize="none" placeholder="Optional"')) +
+          "</div>";
+        body += fieldHtml("c-next", "Next step",
+          inputHtml("c-next", c.next_step, 'placeholder="e.g. Send the Pulse intro DM"'));
+        body += '<div class="grid-2">' +
+          fieldHtml("c-follow", "Follow-up date",
+            '<input id="c-follow" type="date" class="input" value="' + esc(c.follow_up_date || "") + '" />',
+            "No date = shows under Needs attention.") +
+          fieldHtml("c-owner", "Owner (who\u2019s on it)",
+            '<input id="c-owner" class="input" list="member-names" value="' + esc(c.owner || "") + '" placeholder="Optional" />' +
+            '<datalist id="member-names">' +
+            memberNames.map(function (n) { return '<option value="' + esc(n) + '"></option>'; }).join("") +
+            "</datalist>") +
+          "</div>";
+        body += fieldHtml("c-notes", "Notes",
+          '<textarea id="c-notes" class="input" rows="4" placeholder="How you met, what they play, who introduced you\u2026">' +
+          esc(c.notes || "") + "</textarea>");
+
+        if (!isNew && (c.phone || c.email || c.instagram_handle)) {
+          body += '<div class="quick-links">';
+          if (c.phone) body += '<a href="tel:' + esc(String(c.phone).replace(/[^+\d]/g, "")) + '">Call</a>';
+          if (c.email) body += '<a href="mailto:' + esc(c.email) + '">Email</a>';
+          if (c.instagram_handle) {
+            body += '<a href="https://instagram.com/' + esc(String(c.instagram_handle).replace(/^@/, "")) +
+              '" target="_blank" rel="noreferrer">Instagram</a>';
+          }
+          body += "</div>";
+        }
+
+        body += '<p id="c-error" class="msg-error" role="alert" hidden></p>';
+        body += '<button id="c-save" type="submit" class="btn-primary">' + (isNew ? "Add contact" : "Save changes") + "</button>";
+        if (!isNew) {
+          body += '<div id="c-delete-zone">' +
+            '<button type="button" id="c-delete" class="btn-outline" style="width:100%">Delete this contact</button></div>';
+        }
+        body += "</form>";
+
+        sheetShell(isNew ? "Add a contact" : "Edit contact", body, isNew ? "Add a contact" : "Edit " + c.name);
+
+        document.getElementById("contact-form").addEventListener("submit", function (e) {
+          e.preventDefault();
+          var errEl = document.getElementById("c-error");
+          var btn = document.getElementById("c-save");
+          var get = function (id) { return document.getElementById(id).value; };
+          var payload = {
+            p_name: get("c-name").trim(),
+            p_contact_type: get("c-type"),
+            p_instagram_handle: get("c-instagram").trim() || null,
+            p_phone: get("c-phone").trim() || null,
+            p_email: get("c-email").trim() || null,
+            p_notes: get("c-notes"),
+            p_next_step: get("c-next"),
+            p_follow_up_date: get("c-follow") || null,
+            p_stage: get("c-stage"),
+            p_owner: get("c-owner").trim() || null
+          };
+          errEl.hidden = true;
+          btn.disabled = true;
+          btn.textContent = "Saving\u2026";
+          var call = isNew
+            ? rpc("add_contact", Object.assign({ p_token: state.token }, payload))
+            : rpc("update_contact", Object.assign({ p_token: state.token, p_contact_id: c.id }, payload));
+          call.then(function () {
+            state.activity = null;
+            closeSheets();
+            return loadBoard();
+          }).catch(function (err) {
+            if (handleSessionExpiry(err)) return;
+            btn.disabled = false;
+            btn.textContent = isNew ? "Add contact" : "Save changes";
+            errEl.textContent = err.message || "Couldn\u2019t save. Check the fields and try again.";
+            errEl.hidden = false;
+          });
+        });
+
+        if (!isNew) {
+          document.getElementById("c-delete").addEventListener("click", function () {
+            var zone = document.getElementById("c-delete-zone");
+            zone.innerHTML =
+              '<div class="delete-confirm">' +
+                '<button type="button" id="c-delete-yes" class="btn-danger-outline">Yes, delete ' + esc(c.name) + "</button>" +
+                '<button type="button" id="c-delete-no" class="btn-outline">Keep it</button>' +
+              "</div>";
+            document.getElementById("c-delete-no").addEventListener("click", function () { openContactSheet(contact); });
+            document.getElementById("c-delete-yes").addEventListener("click", function () {
+              var yesBtn = document.getElementById("c-delete-yes");
+              yesBtn.disabled = true;
+              yesBtn.textContent = "Deleting\u2026";
+              rpc("delete_contact", { p_token: state.token, p_contact_id: c.id })
+                .then(function () {
+                  state.activity = null;
+                  closeSheets();
+                  return loadBoard();
+                })
+                .catch(function (err) {
+                  if (handleSessionExpiry(err)) return;
+                  yesBtn.disabled = false;
+                  yesBtn.textContent = "Yes, delete " + c.name;
+                  var errEl = document.getElementById("c-error");
+                  errEl.textContent = err.message || "Couldn\u2019t delete. Try again.";
+                  errEl.hidden = false;
+                });
+            });
+          });
+        }
+      }
+
+      /* ---------------- crew panel ---------------- */
+      function openCrewSheet() {
+        var mine = isOwner();
+        var oPhone = ownerPhone();
+        var body = '<p class="section-intro" style="margin-top:8px">Only these phone numbers, plus the shared secret code, can open this board. Signed in as <span style="color:var(--text)">' +
+          esc(state.myName || "") + "</span>" + (mine ? " (owner)" : "") + ".</p>";
+
+        body += '<form id="member-form" class="form-stack" style="margin-top:20px">' +
+          '<h3 style="margin:0">Add a crew member</h3>' +
+          fieldHtml("m-name", "Their name", inputHtml("m-name", "", 'required placeholder="e.g. Hasini"')) +
+          fieldHtml("m-phone", "Their phone number",
+            inputHtml("m-phone", "", 'type="tel" inputmode="tel" autocomplete="tel" required placeholder="(206) 555-0100"') +
+            '<p class="hint" id="m-phone-hint" style="margin-top:4px" hidden></p>') +
+          '<button id="m-add" type="submit" class="btn-outline-accent" style="width:100%">Add to crew list</button>' +
+          '<p id="m-msg" style="margin:0" hidden></p>' +
+          "</form>";
+
+        body += '<h3>On the crew list</h3><div class="stack" style="margin-top:8px" id="member-list">';
+        if (!state.members.length) body += '<p class="section-intro">Loading crew\u2026</p>';
+        state.members.forEach(function (m) {
+          var isTheOwner = m.phone_digits === oPhone;
+          body += '<div class="member-row"><div>' +
+            '<p class="m-name">' + esc(m.name) + (isTheOwner ? '<span class="owner-tag">owner</span>' : "") + "</p>" +
+            '<p class="m-phone">' + esc(m.phone_digits) + " · added by " + esc(m.added_by) + "</p></div>" +
+            (mine && !isTheOwner
+              ? '<button type="button" class="remove-btn" data-remove-member="' + m.id + '" data-member-name="' + esc(m.name) + '" aria-label="Remove ' + esc(m.name) + ' from the crew list">Remove</button>'
+              : "") +
+            "</div>";
+        });
+        body += '</div><p id="member-list-msg" class="msg-error" style="margin-top:8px" hidden></p>';
+
+        if (mine) {
+          body += '<form id="code-form" class="form-stack" style="margin-top:24px">' +
+            '<h3 style="margin:0">Change the secret code</h3>' +
+            fieldHtml("s-new", "New code (at least 4 characters)",
+              '<input id="s-new" class="input" type="password" autocomplete="new-password" required minlength="4" />',
+              "Changing the code signs everyone else out \u2014 they\u2019ll need the new code to get back in. You stay signed in here.") +
+            '<button id="s-change" type="submit" class="btn-outline" style="width:100%">Change code</button>' +
+            '<p id="s-msg" style="margin:0" hidden></p>' +
+            "</form>";
+        }
+
+        body += '<button type="button" id="sign-out" class="btn-outline" style="width:100%;margin-top:24px;color:var(--dim)">Sign out of this device</button>';
+
+        sheetShell("Crew access", body);
+
+        /* live phone preview + duplicate warning, same digits rule as the server */
+        var phoneInput = document.getElementById("m-phone");
+        var hint = document.getElementById("m-phone-hint");
+        phoneInput.addEventListener("input", function () {
+          var d = digits(phoneInput.value);
+          var dup = state.members.filter(function (m) { return m.phone_digits === d; })[0];
+          if (!phoneInput.value.trim()) { hint.hidden = true; return; }
+          hint.hidden = false;
+          if (dup) {
+            hint.innerHTML = '<span style="color:var(--amber)">That number is already on the crew list for ' + esc(dup.name) + ".</span>";
+          } else if (d.length >= 7) {
+            hint.innerHTML = "They\u2019ll sign in with: <span style=\"color:var(--text)\">" + esc(d) + "</span> \u2014 plus the crew code.";
+          } else {
+            hint.textContent = "Keep typing \u2014 the full number with area code.";
+          }
+        });
+
+        document.getElementById("member-form").addEventListener("submit", function (e) {
+          e.preventDefault();
+          var name = document.getElementById("m-name").value.trim();
+          var phone = document.getElementById("m-phone").value.trim();
+          var msg = document.getElementById("m-msg");
+          var btn = document.getElementById("m-add");
+          var d = digits(phone);
+          var showMsg = function (ok, text) {
+            msg.hidden = false;
+            msg.className = ok ? "msg-ok" : "msg-error";
+            msg.setAttribute("role", ok ? "status" : "alert");
+            msg.textContent = text;
+          };
+          msg.hidden = true;
+          var dup = state.members.filter(function (m) { return m.phone_digits === d; })[0];
+          if (dup) {
+            showMsg(false, "That number is already on the crew list \u2014 it\u2019s saved for " + dup.name +
+              ". If the number\u2019s right, they\u2019re already added and can sign in with it plus the crew code.");
+            return;
+          }
+          if (d.length < 7 || d.length > 15) {
+            showMsg(false, "That phone number doesn\u2019t look complete \u2014 enter the full number with area code, exactly as they\u2019ll type it to sign in.");
+            return;
+          }
+          btn.disabled = true;
+          btn.textContent = "Adding\u2026";
+          rpc("add_member", { p_token: state.token, p_name: name, p_phone: phone })
+            .then(function () {
+              state.activity = null;
+              return rpc("list_members", { p_token: state.token });
+            })
+            .then(function (rows) {
+              state.members = rows || [];
+              openCrewSheet();
+              var m2 = document.getElementById("m-msg");
+              m2.hidden = false;
+              m2.className = "msg-ok";
+              m2.setAttribute("role", "status");
+              m2.textContent = "Added " + name + " \u2014 they\u2019re on the crew list and can sign in with that number and the crew code.";
+            })
+            .catch(function (err) {
+              if (handleSessionExpiry(err)) return;
+              btn.disabled = false;
+              btn.textContent = "Add to crew list";
+              showMsg(false, err.message || "Couldn\u2019t add them \u2014 check your connection and try again.");
+            });
+        });
+
+        sheetRoot.querySelectorAll("[data-remove-member]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var id = btn.getAttribute("data-remove-member");
+            var listMsg = document.getElementById("member-list-msg");
+            listMsg.hidden = true;
+            btn.disabled = true;
+            btn.textContent = "Removing\u2026";
+            rpc("remove_member", { p_token: state.token, p_member_id: id })
+              .then(function () {
+                state.activity = null;
+                return rpc("list_members", { p_token: state.token });
+              })
+              .then(function (rows) {
+                state.members = rows || [];
+                openCrewSheet();
+              })
+              .catch(function (err) {
+                if (handleSessionExpiry(err)) return;
+                btn.disabled = false;
+                btn.textContent = "Remove";
+                listMsg.textContent = err.message || "Couldn\u2019t remove them. Try again.";
+                listMsg.hidden = false;
+              });
+          });
+        });
+
+        var codeForm = document.getElementById("code-form");
+        if (codeForm) {
+          codeForm.addEventListener("submit", function (e) {
+            e.preventDefault();
+            var newCode = document.getElementById("s-new").value;
+            var msg = document.getElementById("s-msg");
+            var btn = document.getElementById("s-change");
+            msg.hidden = true;
+            btn.disabled = true;
+            btn.textContent = "Changing\u2026";
+            rpc("change_code", { p_token: state.token, p_new_code: newCode })
+              .then(function (rows) {
+                var row = rows && rows[0];
+                if (row && row.token) {
+                  state.token = row.token;
+                  persistSession();
+                }
+                state.activity = null;
+                openCrewSheet();
+                var m2 = document.getElementById("s-msg");
+                m2.hidden = false;
+                m2.className = "msg-ok";
+                m2.setAttribute("role", "status");
+                m2.textContent = "Code changed \u2014 tell the crew the new one. Everyone else will need it next time they sign in.";
+              })
+              .catch(function (err) {
+                if (handleSessionExpiry(err)) return;
+                btn.disabled = false;
+                btn.textContent = "Change code";
+                msg.hidden = false;
+                msg.className = "msg-error";
+                msg.setAttribute("role", "alert");
+                msg.textContent = err.message || "Couldn\u2019t change the code. Try again.";
+              });
+          });
+        }
+
+        document.getElementById("sign-out").addEventListener("click", function () {
+          clearSession();
+          render();
+        });
+      }
+
+      /* ---------------- boot ---------------- */
+      (function boot() {
+        state.token = readStored(TOKEN_KEY);
+        state.myName = readStored(NAME_KEY);
+        state.myPhone = readStored(PHONE_KEY);
+        if (state.token) {
+          render();
+          loadBoard();
+          return;
+        }
+        document.getElementById("root").innerHTML =
+          '<div class="center-screen"><p>Loading\u2026</p></div>';
+        /* Probe: verify_signin answers "Setup has not been completed yet."
+           until the owner runs first-time setup; any other answer (or a
+           network hiccup) means the sign-in form is the right default. */
+        rpc("verify_signin", { p_phone: "", p_code: "" })
+          .then(function () { state.configured = true; render(); })
+          .catch(function (err) {
+            state.configured = !/setup has not been completed/i.test((err && err.message) || "");
+            render();
+          });
+      })();
+    </script>
+  </body>
+</html>
