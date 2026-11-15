@@ -21,6 +21,7 @@
         --accent: #ff2e7e;
         --accent-ink: #ffffff;
         --amber: #ffb03a;
+        --green: #34d399;
         --radius: 14px;
         --font-display: "Unbounded", system-ui, sans-serif;
         --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -381,6 +382,48 @@
         font-size: 14px;
         font-weight: 500;
       }
+      /* ---------- expenses ---------- */
+      .exp-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+      .exp-stat { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 10px 12px; }
+      .exp-stat .v { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+      .exp-stat .k { display: block; font-size: 12px; color: var(--dim); margin-top: 2px; }
+      .status-pill { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); color: var(--dim); flex-shrink: 0; }
+      .status-pill.st-open { border-color: var(--amber); color: var(--amber); }
+      .status-pill.st-partial { border-color: var(--accent); color: var(--accent); }
+      .status-pill.st-cleared { border-color: var(--green); color: var(--green); }
+      .exp-amount { font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+      .share-list { margin-top: 10px; border-top: 1px dashed var(--border); }
+      .share-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px dashed var(--border); }
+      .share-row:last-child { border-bottom: none; }
+      .share-who { font-size: 14px; }
+      .share-who .share-amt { color: var(--dim); font-size: 13px; }
+      .share-toggle {
+        flex-shrink: 0; border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600;
+        border: 1px solid var(--amber); background: transparent; color: var(--amber);
+      }
+      .share-toggle[aria-pressed="true"] { border-color: var(--green); color: var(--green); }
+      .share-toggle:disabled { border-color: var(--border); color: var(--dim); opacity: 0.7; cursor: default; }
+      .debt-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px dashed var(--border); font-size: 14px; }
+      .debt-row:last-child { border-bottom: none; }
+      .split-row { display: flex; align-items: center; gap: 8px; }
+      .split-row + .split-row { margin-top: 8px; }
+      .split-include {
+        flex: 1; text-align: left; border: 1px solid var(--border); background: var(--surface-2);
+        border-radius: 8px; padding: 8px 12px; font-size: 14px; color: var(--dim);
+      }
+      .split-include[aria-pressed="true"] { border-color: var(--accent); color: var(--text); font-weight: 500; }
+      .split-amt { width: 96px; flex-shrink: 0; }
+      .split-cleared {
+        flex-shrink: 0; border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 600;
+        border: 1px solid var(--amber); background: transparent; color: var(--amber);
+      }
+      .split-cleared[aria-pressed="true"] { border-color: var(--green); color: var(--green); }
+      .seg-row { display: flex; gap: 6px; }
+      .seg-btn {
+        flex: 1; border-radius: 8px; padding: 8px; font-size: 14px;
+        border: 1px solid var(--border); background: transparent; color: var(--dim);
+      }
+      .seg-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
       .sr-only {
         position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
         overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
@@ -411,6 +454,8 @@
       var STAGES = ["To Contact", "Reached Out", "In Conversation", "Confirmed", "Not Now / Passed"];
       var TYPES = ["DJ", "Venue", "Event host", "Other"];
       var STALE_DAYS = 14;
+      var EXP_CATEGORIES = ["Venue", "DJ fee", "Food & drinks", "Decor", "Transport", "Promo & printing", "Gear rental", "Tickets", "Other"];
+      var EXP_STATUSES = ["All", "Open", "Partially cleared", "Cleared"];
 
       /* ---------------- state ---------------- */
       var state = {
@@ -425,7 +470,12 @@
         search: "",
         typeFilter: "All",
         loadError: null,
-        busyStage: {}       // contact id -> true while a stage move is in flight
+        busyStage: {},      // contact id -> true while a stage move is in flight
+        expenses: null,     // null = not loaded yet
+        expensesError: null,
+        busyShare: {},      // share id -> true while a cleared toggle is in flight
+        expSearch: "",
+        expFilter: "All"
       };
 
       /* ---------------- storage (session token only) ---------------- */
@@ -450,6 +500,9 @@
         state.contacts = null;
         state.members = [];
         state.activity = null;
+        state.expenses = null;
+        state.expensesError = null;
+        state.busyShare = {};
         persistSession();
       }
 
@@ -518,6 +571,118 @@
         return '<span class="chip' + (overdue || dueToday ? " chip-warn" : "") + '">' + esc(label) + "</span>";
       }
 
+      /* ---------------- expenses: server mapping & math ----------------
+         Expenses live in the same Supabase project as the contacts board
+         (tables expenses + expense_shares) and sync between crew phones
+         through its RPC functions. All money is integer cents in the UI;
+         the server stores dollar amounts. The server has no category
+         column, so the category rides at the top of the notes field and
+         is parsed back out on load. */
+      function encodeExpNotes(category, note) {
+        return "[[category:" + category + "]]" + (note ? "\n" + note : "");
+      }
+      function decodeExpNotes(notes) {
+        var raw = String(notes == null ? "" : notes);
+        var m = raw.match(/^\[\[category:([^\]]+)\]\](\n)?/);
+        if (m && EXP_CATEGORIES.indexOf(m[1]) !== -1) {
+          return { category: m[1], note: raw.slice(m[0].length) };
+        }
+        return { category: "Other", note: raw };
+      }
+      function mapServerExpense(row) {
+        var decoded = decodeExpNotes(row.notes);
+        return {
+          id: row.id,
+          title: row.title,
+          amountCents: Math.round(parseFloat(row.amount) * 100) || 0,
+          date: row.expense_date,
+          category: decoded.category,
+          paidBy: row.paid_by_name,
+          paidByPhone: row.paid_by_phone,
+          splits: (row.shares || []).map(function (s) {
+            return {
+              id: s.id,
+              name: s.member_name,
+              phone: s.member_phone,
+              amountCents: Math.round(parseFloat(s.share_amount) * 100) || 0,
+              cleared: !!s.cleared
+            };
+          }),
+          note: decoded.note,
+          addedBy: "",
+          createdAt: row.created_at,
+          updatedAt: row.updated_at
+        };
+      }
+      function loadExpenses() {
+        if (!state.token) return Promise.resolve();
+        return rpc("list_expenses", { p_token: state.token })
+          .then(function (rows) {
+            state.expenses = (rows || []).map(mapServerExpense);
+            state.expensesError = null;
+          })
+          .catch(function (err) {
+            if (handleSessionExpiry(err)) return;
+            state.expensesError = err.message || "Couldn't load expenses.";
+          })
+          .then(function () { if (state.token) render(); });
+      }
+      function money(cents) {
+        return "$" + (Math.round(cents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+      function parseMoneyToCents(str) {
+        var n = parseFloat(String(str == null ? "" : str).replace(/[^0-9.]/g, ""));
+        return isNaN(n) ? 0 : Math.round(n * 100);
+      }
+      function formatExpenseDate(dateStr) {
+        var parts = String(dateStr || "").split("-").map(Number);
+        if (!parts[0]) return "";
+        var d = new Date(parts[0], (parts[1] || 1) - 1, parts[2] || 1);
+        return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+      }
+      // Shares owed to the payer (the payer's own share is never a debt).
+      function isPayerShare(exp, s) {
+        if (exp.paidByPhone && s.phone) return s.phone === exp.paidByPhone;
+        return s.name === exp.paidBy;
+      }
+      function owedShares(exp) {
+        return (exp.splits || []).filter(function (s) { return !isPayerShare(exp, s); });
+      }
+      function expenseStatus(exp) {
+        var owed = owedShares(exp);
+        if (!owed.length) return "Cleared";
+        var cleared = owed.filter(function (s) { return s.cleared; }).length;
+        if (cleared === owed.length) return "Cleared";
+        if (cleared > 0) return "Partially cleared";
+        return "Open";
+      }
+      function statusClass(status) {
+        return status === "Cleared" ? "st-cleared" : status === "Partially cleared" ? "st-partial" : "st-open";
+      }
+      function openShareCents(exp) {
+        return owedShares(exp).reduce(function (sum, s) { return sum + (s.cleared ? 0 : s.amountCents); }, 0);
+      }
+      function settledShareCents(exp) {
+        return owedShares(exp).reduce(function (sum, s) { return sum + (s.cleared ? s.amountCents : 0); }, 0);
+      }
+      // Everyone who can appear in a split on the shared board: crew
+      // members only (the server requires payer and split to be on the
+      // crew list), plus anyone already on the expense being edited so
+      // their row doesn't vanish if they have since left the crew list.
+      function participantCandidates(extra) {
+        var seen = {}, out = [];
+        function add(name, phone) {
+          var key = phone ? "p:" + phone : "n:" + String(name || "").trim().toLowerCase();
+          if ((name || phone) && !seen[key]) { seen[key] = true; out.push({ name: name || "", phone: phone || "" }); }
+        }
+        state.members.forEach(function (m) { add(m.name, m.phone_digits); });
+        (extra || []).forEach(function (p) {
+          if (typeof p === "string") add(p, "");
+          else if (p) add(p.name, p.phone);
+        });
+        return out;
+      }
+
       /* ---------------- Supabase RPC ---------------- */
       function rpc(fn, body) {
         return fetch(SB_URL + "/rest/v1/rpc/" + fn, {
@@ -561,13 +726,24 @@
 
       /* ---------------- data loading ---------------- */
       function loadBoard() {
+        var expensesFetch = rpc("list_expenses", { p_token: state.token })
+          .then(function (rows) { return { ok: true, rows: rows || [] }; })
+          .catch(function (err) { return { ok: false, err: err }; });
         return Promise.all([
           rpc("list_contacts", { p_token: state.token }),
-          rpc("list_members", { p_token: state.token })
+          rpc("list_members", { p_token: state.token }),
+          expensesFetch
         ]).then(function (results) {
           state.contacts = results[0] || [];
           state.members = results[1] || [];
           state.loadError = null;
+          var exp = results[2];
+          if (exp.ok) {
+            state.expenses = exp.rows.map(mapServerExpense);
+            state.expensesError = null;
+          } else if (!handleSessionExpiry(exp.err)) {
+            state.expensesError = exp.err.message || "Couldn't load expenses.";
+          }
         }).catch(function (err) {
           if (handleSessionExpiry(err)) return;
           state.loadError = err.message || "Couldn't load the board.";
@@ -830,6 +1006,141 @@
         return html;
       }
 
+      /* ---------------- expenses view ---------------- */
+      function renderExpenses() {
+        if (state.expenses === null) {
+          if (state.expensesError) {
+            return '<div class="card"><p style="margin:0;font-size:14px">Couldn\u2019t load expenses.</p>' +
+              '<p class="hint" style="margin-top:4px">' + esc(state.expensesError) + "</p>" +
+              '<button type="button" class="btn-outline-accent" data-retry-expenses style="margin-top:8px;padding:6px 12px">Try again</button></div>';
+          }
+          return '<p class="section-intro">Loading expenses\u2026</p>';
+        }
+        var all = state.expenses || [];
+        if (!all.length) {
+          return '<div class="empty-state"><h2>No expenses yet</h2>' +
+            "<p>Log what the crew spends on Pulse nights \u2014 venue costs, DJ fees, food, transport \u2014 " +
+            "who paid, how it splits, and who has settled their share.</p>" +
+            '<button type="button" class="btn-primary" data-add-expense>Add the first expense</button></div>';
+        }
+        var totalSpent = all.reduce(function (s, e) { return s + e.amountCents; }, 0);
+        var stillOpen = all.reduce(function (s, e) { return s + openShareCents(e); }, 0);
+        var settled = all.reduce(function (s, e) { return s + settledShareCents(e); }, 0);
+
+        var html = '<div class="exp-summary">' +
+          '<div class="exp-stat"><span class="v">' + money(totalSpent) + '</span><span class="k">Total spent · ' + all.length + (all.length === 1 ? " expense" : " expenses") + "</span></div>" +
+          '<div class="exp-stat"><span class="v">' + money(stillOpen) + '</span><span class="k">Still to settle</span></div>' +
+          '<div class="exp-stat"><span class="v">' + money(settled) + '</span><span class="k">Settled so far</span></div>' +
+          "</div>";
+
+        // Outstanding debts, aggregated debtor -> payer across open shares.
+        var debts = {};
+        all.forEach(function (e) {
+          owedShares(e).forEach(function (s) {
+            if (s.cleared) return;
+            var key = s.name + " " + e.paidBy;
+            if (!debts[key]) debts[key] = { from: s.name, to: e.paidBy, cents: 0, count: 0 };
+            debts[key].cents += s.amountCents;
+            debts[key].count += 1;
+          });
+        });
+        var debtRows = Object.keys(debts).map(function (k) { return debts[k]; })
+          .sort(function (a, b) { return b.cents - a.cents; });
+        html += '<div class="card" style="margin-bottom:16px"><h3 style="font-family:var(--font-display);font-size:13px;font-weight:600;margin:0 0 4px">Who owes what</h3>';
+        if (!debtRows.length) {
+          html += '<p style="margin:4px 0 0;font-size:14px">Everyone\u2019s square \u2014 no shares are outstanding.</p>';
+        } else {
+          debtRows.forEach(function (d) {
+            html += '<div class="debt-row"><span><strong>' + esc(d.from) + "</strong> owes <strong>" + esc(d.to) + "</strong>" +
+              '<span style="color:var(--dim);font-size:12px"> · ' + d.count + (d.count === 1 ? " share" : " shares") + "</span></span>" +
+              "<span>" + money(d.cents) + "</span></div>";
+          });
+        }
+        html += "</div>";
+
+        html += '<div><label class="sr-only" for="exp-search">Search expenses</label>' +
+          '<input id="exp-search" class="input" type="search" placeholder="Search what it was for, who paid, category\u2026" value="' + esc(state.expSearch) + '" /></div>' +
+          '<div class="filter-row" role="group" aria-label="Filter expenses by status">';
+        EXP_STATUSES.forEach(function (s) {
+          html += '<button type="button" class="filter-btn" data-exp-filter="' + esc(s) + '" aria-pressed="' +
+            (state.expFilter === s) + '">' + esc(s) + "</button>";
+        });
+        html += '<button type="button" class="filter-btn" data-export-expenses style="margin-left:auto">Export CSV</button></div>';
+
+        var q = state.expSearch.trim().toLowerCase();
+        var filtered = all.filter(function (e) {
+          if (state.expFilter !== "All" && expenseStatus(e) !== state.expFilter) return false;
+          if (!q) return true;
+          var hay = [e.title, e.category, e.paidBy, e.note || "", e.addedBy]
+            .concat((e.splits || []).map(function (s) { return s.name; }))
+            .join(" ").toLowerCase();
+          return hay.indexOf(q) !== -1;
+        }).slice().sort(function (a, b) {
+          if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+          return a.createdAt < b.createdAt ? 1 : -1;
+        });
+
+        html += '<div class="stack" style="margin-top:16px">';
+        if (!filtered.length) html += '<p class="section-intro">No expenses match that filter.</p>';
+        filtered.forEach(function (e) {
+          var status = expenseStatus(e);
+          html += '<article class="card">' +
+            '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">' +
+              '<span class="card-name">' + esc(e.title) + "</span>" +
+              '<span class="exp-amount">' + money(e.amountCents) + "</span></div>" +
+            '<div class="list-sub"><span>' + esc(formatExpenseDate(e.date)) + '</span><span>·</span>' +
+              '<span class="badge">' + esc(e.category) + "</span>" +
+              "<span>Paid by <strong style=\"color:var(--text)\">" + esc(e.paidBy) + "</strong></span>" +
+              '<span class="status-pill ' + statusClass(status) + '">' + esc(status) + "</span></div>" +
+            '<div class="share-list">';
+          (e.splits || []).forEach(function (s) {
+            var own = isPayerShare(e, s);
+            html += '<div class="share-row"><span class="share-who">' + esc(s.name) +
+              ' <span class="share-amt">· ' + money(s.amountCents) + "</span></span>" +
+              (own
+                ? '<span class="hint">their share</span>'
+                : '<button type="button" class="share-toggle" data-toggle-share="' + esc(s.id) + '"' +
+                  (state.busyShare[s.id] ? " disabled" : "") +
+                  ' aria-pressed="' + !!s.cleared + '" aria-label="Mark ' + esc(s.name) + "\u2019s share of " + esc(e.title) +
+                  (s.cleared ? " as not cleared" : " as cleared") + '">' +
+                  (state.busyShare[s.id] ? "Saving\u2026" : s.cleared ? "Cleared ✓" : "Mark cleared") + "</button>") +
+              "</div>";
+          });
+          html += "</div>";
+          if (e.note) html += '<p style="margin:8px 0 0;font-size:14px;color:var(--dim)">' + esc(e.note) + "</p>";
+          html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px">' +
+            (e.addedBy ? '<span class="card-meta" style="margin-top:0">Added by ' + esc(e.addedBy) + "</span>" : "<span></span>") +
+            '<button type="button" class="btn-outline" data-edit-expense="' + e.id + '" style="padding:6px 14px" aria-label="Edit ' + esc(e.title) + '">Edit</button></div>' +
+            "</article>";
+        });
+        html += "</div>";
+        return html;
+      }
+
+      function exportExpensesCsv() {
+        var rows = [["What", "Date", "Amount", "Category", "Paid by", "Status", "Split between", "Cleared", "Note", "Added by"]];
+        (state.expenses || []).forEach(function (e) {
+          rows.push([
+            e.title, e.date, (e.amountCents / 100).toFixed(2), e.category, e.paidBy, expenseStatus(e),
+            (e.splits || []).map(function (s) { return s.name + " " + (s.amountCents / 100).toFixed(2); }).join("; "),
+            owedShares(e).filter(function (s) { return s.cleared; }).map(function (s) { return s.name; }).join("; "),
+            e.note || "", e.addedBy
+          ]);
+        });
+        var csv = rows.map(function (r) {
+          return r.map(function (cell) { return '"' + String(cell).replace(/"/g, '""') + '"'; }).join(",");
+        }).join("\n");
+        var blob = new Blob([csv], { type: "text/csv" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = "pulse-expenses.csv";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      }
+
       var ACTION_TEXT = {
         setup: function (d) { return "completed the crew setup"; },
         contact_added: function (d) { return "added " + d; },
@@ -838,6 +1149,9 @@
         stage_changed: function (d) { return "moved " + d; },
         member_added: function (d) { return "added crew member " + d; },
         member_removed: function (d) { return "removed crew member " + d; },
+        expense_added: function (d) { return "added expense " + d; },
+        expense_updated: function (d) { return "updated expense " + d; },
+        expense_deleted: function (d) { return "deleted expense " + d; },
         code_changed: function (d) { return d || "changed the secret code"; }
       };
       function renderActivity() {
@@ -856,10 +1170,12 @@
 
       function renderApp() {
         var attention = state.contacts ? attentionList() : [];
+        var openExpenses = (state.expenses || []).filter(function (e) { return expenseStatus(e) !== "Cleared"; }).length;
         var tabs = [
           { key: "board", label: "Board" },
           { key: "list", label: "List" },
           { key: "attention", label: "Attention", badge: attention.length },
+          { key: "expenses", label: "Expenses", badge: openExpenses },
           { key: "activity", label: "Activity" }
         ];
         var html = '<header class="app-header"><div class="app-header-inner">' +
@@ -879,7 +1195,9 @@
             esc(state.actionError) + "</p></div>";
           state.actionError = null;
         }
-        if (state.loadError) {
+        if (state.tab === "expenses") {
+          html += renderExpenses();
+        } else if (state.loadError) {
           html += '<div class="card"><p style="margin:0;font-size:14px">Couldn\u2019t load the board.</p>' +
             '<p class="hint" style="margin-top:4px">' + esc(state.loadError) + "</p>" +
             '<button type="button" class="btn-outline-accent" id="retry-load" style="margin-top:8px;padding:6px 12px">Try again</button></div>';
@@ -891,16 +1209,33 @@
           html += renderList();
         } else if (state.tab === "attention") {
           html += renderAttention(attention);
+        } else if (state.tab === "expenses") {
+          html += renderExpenses();
         } else if (state.tab === "activity") {
           html += renderActivity();
         }
         html += "</main>" +
-          '<button type="button" class="fab" id="fab-add" aria-label="Add a contact">+ Add contact</button>';
+          (state.tab === "expenses"
+            ? '<button type="button" class="fab" id="fab-add" aria-label="Add an expense">+ Add expense</button>'
+            : '<button type="button" class="fab" id="fab-add" aria-label="Add a contact">+ Add contact</button>');
 
         document.getElementById("root").innerHTML = html;
 
         document.getElementById("crew-open").addEventListener("click", openCrewSheet);
-        document.getElementById("fab-add").addEventListener("click", function () { openContactSheet(null); });
+        document.getElementById("fab-add").addEventListener("click", function () {
+          if (state.tab === "expenses") openExpenseSheet(null);
+          else openContactSheet(null);
+        });
+        var expSearch = document.getElementById("exp-search");
+        if (expSearch) {
+          expSearch.addEventListener("input", function () {
+            state.expSearch = expSearch.value;
+            var pos = expSearch.selectionStart;
+            render();
+            var again = document.getElementById("exp-search");
+            if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+          });
+        }
         var retry = document.getElementById("retry-load");
         if (retry) retry.addEventListener("click", loadBoard);
         var search = document.getElementById("search");
@@ -936,6 +1271,7 @@
           state.tab = tabBtn.getAttribute("data-tab");
           render();
           if (state.tab === "activity" && state.activity === null) loadActivity();
+          if (state.tab === "expenses" && state.expenses === null && !state.expensesError) loadExpenses();
           return;
         }
         var filterBtn = closest("[data-type-filter]");
@@ -970,6 +1306,50 @@
           return;
         }
         if (closest("[data-add-contact]")) { openContactSheet(null); return; }
+        var expFilterBtn = closest("[data-exp-filter]");
+        if (expFilterBtn) {
+          state.expFilter = expFilterBtn.getAttribute("data-exp-filter");
+          render();
+          return;
+        }
+        if (closest("[data-export-expenses]")) { exportExpensesCsv(); return; }
+        if (closest("[data-retry-expenses]")) { state.expenses = null; state.expensesError = null; render(); loadExpenses(); return; }
+        var shareBtn = closest("[data-toggle-share]");
+        if (shareBtn) {
+          var shareId = shareBtn.getAttribute("data-toggle-share");
+          if (state.busyShare[shareId]) return;
+          var ownerExp = null, share = null;
+          (state.expenses || []).forEach(function (x) {
+            (x.splits || []).forEach(function (s) { if (s.id === shareId) { ownerExp = x; share = s; } });
+          });
+          if (!share) return;
+          var newCleared = !share.cleared;
+          share.cleared = newCleared; // optimistic; reverted if the save fails
+          state.busyShare[shareId] = true;
+          render();
+          rpc("set_share_cleared", { p_token: state.token, p_share_id: shareId, p_cleared: newCleared })
+            .then(function () {
+              delete state.busyShare[shareId];
+              state.activity = null;
+              if (state.token) render();
+            })
+            .catch(function (err) {
+              delete state.busyShare[shareId];
+              share.cleared = !newCleared;
+              if (!handleSessionExpiry(err)) {
+                state.actionError = err.message || "Couldn't update that share. Try again.";
+                if (state.token) render();
+              }
+            });
+          return;
+        }
+        var editExpBtn = closest("[data-edit-expense]");
+        if (editExpBtn) {
+          var target = (state.expenses || []).filter(function (x) { return x.id === editExpBtn.getAttribute("data-edit-expense"); })[0];
+          if (target) openExpenseSheet(target);
+          return;
+        }
+        if (closest("[data-add-expense]")) { openExpenseSheet(null); return; }
         if (closest("[data-goto-attention]")) {
           state.tab = "attention";
           render();
@@ -1141,6 +1521,257 @@
                   yesBtn.disabled = false;
                   yesBtn.textContent = "Yes, delete " + c.name;
                   var errEl = document.getElementById("c-error");
+                  errEl.textContent = err.message || "Couldn\u2019t delete. Try again.";
+                  errEl.hidden = false;
+                });
+            });
+          });
+        }
+      }
+
+      /* ---------------- expense editor ---------------- */
+      function splitRowHtml(person, included, amountStr, cleared, customMode) {
+        return '<div class="split-row" data-split-row data-name="' + esc(person.name) + '" data-phone="' + esc(person.phone || "") + '">' +
+          '<button type="button" class="split-include" data-split-include aria-pressed="' + !!included + '" aria-label="Include ' + esc(person.name) + ' in the split">' + esc(person.name) + "</button>" +
+          '<input class="input split-amt" data-split-amt type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" value="' + esc(amountStr || "") + '"' + (customMode ? "" : " disabled") + ' aria-label="Share amount for ' + esc(person.name) + '" />' +
+          '<button type="button" class="split-cleared" data-split-cleared aria-pressed="' + !!cleared + '" aria-label="Toggle whether ' + esc(person.name) + ' has cleared their share">' + (cleared ? "Cleared ✓" : "Pending") + "</button>" +
+          "</div>";
+      }
+
+      function openExpenseSheet(expense) {
+        var isNew = !expense;
+        var e = expense || {
+          title: "", amountCents: 0, date: todayStr(), category: "Other",
+          paidBy: state.myName || "", paidByPhone: state.myPhone || "", splits: null, note: ""
+        };
+        var savedByPhone = {}, savedByName = {};
+        (e.splits || []).forEach(function (s) {
+          if (s.phone) savedByPhone[s.phone] = s;
+          savedByName[s.name] = s;
+        });
+        var savedPeople = (e.splits || []).map(function (s) { return { name: s.name, phone: s.phone }; });
+        if (e.paidBy) savedPeople.push({ name: e.paidBy, phone: e.paidByPhone });
+        var candidates = participantCandidates(savedPeople);
+        var memberPhones = {};
+        state.members.forEach(function (m) { memberPhones[m.phone_digits] = true; });
+        // Custom mode if saved shares aren't an equal division of the total.
+        var customMode = false;
+        if (e.splits && e.splits.length > 1) {
+          var first = e.splits[0].amountCents;
+          customMode = e.splits.some(function (s) { return Math.abs(s.amountCents - first) > 1; });
+        }
+
+        var body = '<form id="expense-form" class="form-stack" style="margin-top:16px">';
+        body += fieldHtml("e-title", "What was it for? *",
+          inputHtml("e-title", e.title, 'required placeholder="e.g. Venue deposit for Dec 12 night"'));
+        body += '<div class="grid-2">' +
+          fieldHtml("e-amount", "Total amount ($) *",
+            '<input id="e-amount" class="input" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0.00" value="' +
+            (e.amountCents ? (e.amountCents / 100).toFixed(2) : "") + '" />') +
+          fieldHtml("e-date", "Date",
+            '<input id="e-date" type="date" class="input" value="' + esc(e.date || todayStr()) + '" />') +
+          "</div>";
+        var payerPhone = e.paidByPhone || "";
+        if (!candidates.some(function (p) { return p.phone && p.phone === payerPhone; })) {
+          payerPhone = state.myPhone && memberPhones[state.myPhone]
+            ? state.myPhone
+            : (candidates.filter(function (p) { return p.phone; })[0] || {}).phone || "";
+        }
+        var payerOptions = candidates.filter(function (p) { return p.phone; }).map(function (p) {
+          return '<option value="' + esc(p.phone) + '"' + (p.phone === payerPhone ? " selected" : "") + ">" + esc(p.name) + "</option>";
+        }).join("");
+        body += '<div class="grid-2">' +
+          fieldHtml("e-category", "Category",
+            '<select id="e-category" class="input">' + optionsHtml(EXP_CATEGORIES, e.category) + "</select>") +
+          fieldHtml("e-paidby", "Paid by *",
+            '<select id="e-paidby" class="input">' + payerOptions + "</select>",
+            "Expenses sync to the whole crew, so the payer and everyone in the split need to be on the crew list.") +
+          "</div>";
+
+        body += '<div><span class="field-label">How is it split?</span>' +
+          '<div class="seg-row" role="group" aria-label="Split type">' +
+          '<button type="button" class="seg-btn" id="e-split-equal" aria-pressed="' + !customMode + '">Split equally</button>' +
+          '<button type="button" class="seg-btn" id="e-split-custom" aria-pressed="' + customMode + '">Custom amounts</button>' +
+          "</div>" +
+          '<p class="hint" style="margin-top:4px">Tap a name to include or leave them out. Use the Pending / Cleared button to record who has already settled. The shared board splits the total equally between the people included.</p></div>';
+
+        body += '<div><span class="field-label">Split between</span><div id="e-splits">';
+        candidates.forEach(function (person) {
+          var saved = (person.phone && savedByPhone[person.phone]) || savedByName[person.name];
+          var included = isNew ? !!person.phone : !!saved;
+          body += splitRowHtml(
+            person,
+            included,
+            saved ? (saved.amountCents / 100).toFixed(2) : "",
+            saved ? !!saved.cleared : false,
+            customMode
+          );
+        });
+        body += "</div></div>";
+
+        body += fieldHtml("e-note", "Note",
+          '<textarea id="e-note" class="input" rows="2" placeholder="Receipt, payment method, anything worth remembering\u2026">' + esc(e.note || "") + "</textarea>");
+        body += '<p id="e-error" class="msg-error" role="alert" hidden></p>';
+        body += '<button id="e-save" type="submit" class="btn-primary">' + (isNew ? "Add expense" : "Save changes") + "</button>";
+        if (!isNew) {
+          body += '<div id="e-delete-zone">' +
+            '<button type="button" id="e-delete" class="btn-outline" style="width:100%">Delete this expense</button></div>';
+        }
+        body += "</form>";
+
+        sheetShell(isNew ? "Add an expense" : "Edit expense", body, isNew ? "Add an expense" : "Edit " + e.title);
+
+        var splitType = customMode ? "custom" : "equal";
+        function refreshSplitMode() {
+          document.getElementById("e-split-equal").setAttribute("aria-pressed", splitType === "equal");
+          document.getElementById("e-split-custom").setAttribute("aria-pressed", splitType === "custom");
+          sheetRoot.querySelectorAll("[data-split-amt]").forEach(function (inp) {
+            inp.disabled = splitType !== "custom";
+          });
+        }
+        document.getElementById("e-split-equal").addEventListener("click", function () { splitType = "equal"; refreshSplitMode(); });
+        document.getElementById("e-split-custom").addEventListener("click", function () { splitType = "custom"; refreshSplitMode(); });
+
+        function wireSplitRow(row) {
+          var inc = row.querySelector("[data-split-include]");
+          inc.addEventListener("click", function () {
+            inc.setAttribute("aria-pressed", inc.getAttribute("aria-pressed") !== "true");
+          });
+          var clr = row.querySelector("[data-split-cleared]");
+          clr.addEventListener("click", function () {
+            var on = clr.getAttribute("aria-pressed") !== "true";
+            clr.setAttribute("aria-pressed", on);
+            clr.textContent = on ? "Cleared ✓" : "Pending";
+          });
+        }
+        sheetRoot.querySelectorAll("[data-split-row]").forEach(wireSplitRow);
+
+        document.getElementById("expense-form").addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var errEl = document.getElementById("e-error");
+          var btn = document.getElementById("e-save");
+          var showErr = function (msg) {
+            errEl.textContent = msg;
+            errEl.hidden = false;
+            btn.disabled = false;
+            btn.textContent = isNew ? "Add expense" : "Save changes";
+          };
+          errEl.hidden = true;
+          var title = document.getElementById("e-title").value.trim();
+          var totalCents = parseMoneyToCents(document.getElementById("e-amount").value);
+          var paidByPhone = document.getElementById("e-paidby").value;
+          if (!title) { showErr("Give the expense a name \u2014 what was it for?"); return; }
+          if (totalCents <= 0) { showErr("Enter the total amount spent."); return; }
+          if (!paidByPhone) { showErr("Say who paid \u2014 the payer needs to be on the crew list."); return; }
+
+          var included = [];
+          var missingPhone = false;
+          sheetRoot.querySelectorAll("[data-split-row]").forEach(function (row) {
+            if (row.querySelector("[data-split-include]").getAttribute("aria-pressed") !== "true") return;
+            var phone = row.getAttribute("data-phone");
+            if (!phone) missingPhone = true;
+            included.push({
+              name: row.getAttribute("data-name"),
+              phone: phone,
+              amountCents: parseMoneyToCents(row.querySelector("[data-split-amt]").value),
+              cleared: row.querySelector("[data-split-cleared]").getAttribute("aria-pressed") === "true"
+            });
+          });
+          if (!included.length) { showErr("Include at least one person in the split."); return; }
+          if (missingPhone) {
+            showErr("Everyone in the split needs to be on the crew list for the expense to sync \u2014 add them from the Crew panel first.");
+            return;
+          }
+
+          if (splitType === "custom") {
+            var sum = included.reduce(function (s2, x) { return s2 + x.amountCents; }, 0);
+            if (sum !== totalCents) {
+              showErr("The shares add up to " + money(sum) + " but the total is " + money(totalCents) +
+                " \u2014 adjust them so they match.");
+              return;
+            }
+            var firstAmt = included[0].amountCents;
+            var uneven = included.some(function (s) { return Math.abs(s.amountCents - firstAmt) > 1; });
+            if (uneven) {
+              showErr("The shared board splits each expense equally between the people included, so uneven custom amounts can\u2019t be saved yet. Switch to \u201cSplit equally\u201d to save this expense.");
+              return;
+            }
+          }
+          // The payer's own share is settled by definition.
+          included.forEach(function (s) { if (s.phone === paidByPhone) s.cleared = true; });
+          var desiredCleared = {};
+          included.forEach(function (s) { desiredCleared[s.phone] = s.cleared; });
+
+          btn.disabled = true;
+          btn.textContent = "Saving\u2026";
+          var payload = {
+            p_token: state.token,
+            p_title: title,
+            p_amount: totalCents / 100,
+            p_paid_by_phone: paidByPhone,
+            p_split_phones: included.map(function (s) { return s.phone; }),
+            p_expense_date: document.getElementById("e-date").value || todayStr(),
+            p_notes: encodeExpNotes(
+              document.getElementById("e-category").value,
+              document.getElementById("e-note").value.trim()
+            )
+          };
+          var saveCall = isNew
+            ? rpc("add_expense", payload)
+            : rpc("update_expense", Object.assign({ p_expense_id: e.id }, payload));
+          saveCall.then(function (newId) {
+            var expenseId = isNew ? newId : e.id;
+            state.activity = null;
+            // The server creates shares uncleared; apply the cleared
+            // flags chosen in this form (payer included) share by share.
+            return rpc("list_expenses", { p_token: state.token }).then(function (rows) {
+              var fresh = (rows || []).map(mapServerExpense);
+              state.expenses = fresh;
+              state.expensesError = null;
+              var saved = fresh.filter(function (x) { return x.id === expenseId; })[0];
+              if (!saved) return null;
+              var fixes = [];
+              saved.splits.forEach(function (s) {
+                var want = desiredCleared[s.phone];
+                if (want !== undefined && want !== s.cleared) {
+                  fixes.push(rpc("set_share_cleared", { p_token: state.token, p_share_id: s.id, p_cleared: want }));
+                }
+              });
+              return fixes.length ? Promise.all(fixes) : null;
+            });
+          }).then(function () {
+            closeSheets();
+            return loadExpenses();
+          }).catch(function (err) {
+            if (handleSessionExpiry(err)) return;
+            showErr(err.message || "Couldn\u2019t save the expense. Try again.");
+          });
+        });
+
+        if (!isNew) {
+          document.getElementById("e-delete").addEventListener("click", function () {
+            var zone = document.getElementById("e-delete-zone");
+            zone.innerHTML =
+              '<div class="delete-confirm">' +
+                '<button type="button" id="e-delete-yes" class="btn-danger-outline">Yes, delete it</button>' +
+                '<button type="button" id="e-delete-no" class="btn-outline">Keep it</button>' +
+              "</div>";
+            document.getElementById("e-delete-no").addEventListener("click", function () { openExpenseSheet(expense); });
+            document.getElementById("e-delete-yes").addEventListener("click", function () {
+              var yesBtn = document.getElementById("e-delete-yes");
+              yesBtn.disabled = true;
+              yesBtn.textContent = "Deleting\u2026";
+              rpc("delete_expense", { p_token: state.token, p_expense_id: e.id })
+                .then(function () {
+                  state.activity = null;
+                  closeSheets();
+                  return loadExpenses();
+                })
+                .catch(function (err) {
+                  if (handleSessionExpiry(err)) return;
+                  yesBtn.disabled = false;
+                  yesBtn.textContent = "Yes, delete it";
+                  var errEl = document.getElementById("e-error");
                   errEl.textContent = err.message || "Couldn\u2019t delete. Try again.";
                   errEl.hidden = false;
                 });
